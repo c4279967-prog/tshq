@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tech Simplified HQ — Video Studio v1.0</title>
+<style>
+:root{--bg:#050608;--p:#14171c;--p2:#1c2028;--b:#2e8bff;--t:#e8ecf2;--m:#8a93a3;--ok:#2ecc71;--wr:#f5a623;--er:#ff5c5c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px system-ui,sans-serif;padding-bottom:70px}
+header{padding:14px 16px;font-weight:700;border-bottom:1px solid #222;position:sticky;top:0;background:var(--bg);z-index:5}header span{color:var(--b)}
+main{padding:12px;max-width:900px;margin:auto}section{display:none}section.on{display:block}
+.card{background:var(--p);border-radius:12px;padding:12px;margin:10px 0;border:1px solid #232831}
+input,select,button{font:inherit;color:var(--t);background:var(--p2);border:1px solid #333a46;border-radius:8px;padding:10px;max-width:100%}
+input{width:100%;margin:4px 0}button{cursor:pointer}button.pr{background:var(--b);border-color:var(--b);color:#fff;font-weight:600}
+button.dg{color:var(--er)}.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.chips button{padding:6px 10px;font-size:13px;border-radius:20px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0b0d11;border-top:1px solid #222}nav button{flex:1;border:0;background:none;padding:14px 2px;font-size:12px;color:var(--m);border-radius:0}nav button.on{color:var(--b);border-top:2px solid var(--b)}
+video{width:100%;border-radius:8px;background:#000;max-height:240px}.m{color:var(--m);font-size:13px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;margin:2px 0}
+.yes{background:#12361f;color:var(--ok)}.cond{background:#3a2e10;color:var(--wr)}.no{background:#3a1515;color:var(--er)}.unknown{background:#2a2a2a;color:#bbb}
+progress{width:100%;height:10px}a{color:var(--b)}.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+</style></head><body>
+<header>TECH SIMPLIFIED <span>HQ</span> · Video Studio v1.0</header>
+<main>
+<section id="dashboard" class="on"><div class="card"><b>Dashboard</b><div id="stats" class="m"></div></div>
+<div class="card"><b>Shortcuts</b><div class="row"><button class="pr" onclick="go('discover')">Find footage</button><button onclick="go('library')">My Library</button><button onclick="go('downloads')">Downloads</button></div></div>
+<div class="card"><b>Recently saved</b><div id="recent" class="m"></div></div>
+<div class="card"><b>Roadmap</b><div class="m">v1.0 (this) Discover · Downloads · Library<br>v2.0 AI Studio (scripts/scenes) — not built yet<br>v3.0 Video Editor &amp; export — not built yet<br>v4.0 PWA install — not built yet</div></div></section>
+
+<section id="discover"><div class="card">
+<input id="q" placeholder="Search footage e.g. forest drone" onkeydown="if(event.key=='Enter')search()">
+<div class="chips row" id="cats"></div>
+<div class="row" style="margin-top:8px"><select id="src"><option value="ia">Internet Archive</option><option value="wm">Wikimedia Commons</option><option value="px">Pexels (key)</option><option value="pb">Pixabay (key)</option></select>
+<select id="fres"><option value="0">Any resolution</option><option value="720">720p+</option><option value="1080">1080p+</option><option value="2160">4K</option></select>
+<select id="fdur"><option value="0">Any length</option><option value="15">≤15s</option><option value="60">≤60s</option><option value="300">≤5min</option></select>
+<select id="fori"><option value="">Any shape</option><option value="l">Landscape</option><option value="p">Portrait</option><option value="s">Square</option></select></div>
+<label class="m"><input type="checkbox" id="onlyl" checked style="width:auto"> Internet Archive: only items with a stated license</label>
+<button class="pr" style="width:100%;margin-top:8px" onclick="search()">Search</button>
+<div class="m">Filters only apply where the source reports the data. Unknown values are labelled, never guessed.</div></div>
+<div id="res" class="g"></div></section>
+
+<section id="downloads"><div class="card m">Downloads are held in memory while running (max 400 MB each) then saved to this browser. Pause/resume works only if the server supports it.</div><div id="dl"></div></section>
+
+<section id="library"><div class="card"><input id="ls" placeholder="Search library" oninput="lib()"></div><div id="libl"></div></section>
+
+<section id="settings"><div class="card"><b>Optional free API keys</b><div class="m">Stored only in this browser. Sent only to that provider. Get free keys at pexels.com/api and pixabay.com/api/docs.</div>
+<input id="kpx" placeholder="Pexels API key"><input id="kpb" placeholder="Pixabay API key">
+<div class="row"><button class="pr" onclick="saveKeys()">Save keys</button><button class="dg" onclick="clearKeys()">Remove keys</button></div></div>
+<div class="card"><b>Storage</b><div id="stor" class="m"></div><button onclick="persist()">Ask browser to keep my data</button></div></section>
+</main>
+<nav id="nav"></nav>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const su=u=>/^https:\/\//i.test(u||'')?u:'#',MAXMEM=400*1048576;
+const TABS=[['dashboard','Home'],['discover','Discover'],['downloads','Downloads'],['library','Library'],['settings','Settings']];
+$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
+function go(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==id));if(id=='library')lib();if(id=='dashboard'||id=='settings')stats()}
+const CATS=['3D animation','cinematic','horror','thriller','forest nature','science fiction','technology','futuristic city','drone','documentary','space','historical','background loop','abstract animation'];
+$('#cats').innerHTML=CATS.map(c=>`<button onclick="$('#q').value='${c}';search()">${c}</button>`).join('');
+// ---------- storage (IndexedDB) ----------
+const DB=new Promise((ok,no)=>{const r=indexedDB.open('tshq',1);r.onupgradeneeded=()=>{r.result.createObjectStore('items',{keyPath:'id'});r.result.createObjectStore('files')};r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const tx=async(st,mode,fn)=>{const d=await DB;return new Promise((ok,no)=>{const t=d.transaction(st,mode),q=fn(t.objectStore(st));t.oncomplete=()=>ok(q&&q.result);t.onerror=t.onabort=()=>no(t.error)})};
+const allItems=()=>tx('items','readonly',s=>s.getAll());
+async function saveItem(it){try{it.saved=it.saved||Date.now();await tx('items','readwrite',s=>s.put(it));return true}catch(e){alert('Could not save (storage full?): '+e.message);return false}}
+// ---------- license logic ----------
+function cls(l){const s=(l||'').toLowerCase();if(!s)return['unknown','No license stated. Rights unclear: do not use commercially.'];
+if(/-nc|\bnc\b|noncommercial/.test(s))return['no','Non-commercial only: NOT safe for monetized YouTube.'];
+if(/-nd|\bnd\b/.test(s))return['cond','No-derivatives: editing/remixing may not be allowed.'];
+if(/publicdomain|cc0|\bpd\b|public domain/.test(s))return['yes','Public domain / CC0: free for commercial use.'];
+if(/pexels|pixabay/.test(s))return['yes','Free commercial use under the provider license (no standalone redistribution).'];
+if(/\bby\b|cc-by|by-sa|by\/|attribution/.test(s))return['cond','Commercial OK but you must credit the author'+(/sa/.test(s)?' and share-alike applies.':'.')];
+return['unknown','License unclear. Check the source page before use.']}
+// ---------- sources ----------
+const J=async(u,o)=>{const r=await fetch(u,o);if(!r.ok)throw new Error(r.status+' from source');return r.json()};
+function mk(o){const[c,n]=cls(o.license);return{...o,commercial:c,note:n}}
+const S={
+async ia(q){const d=await J('https://archive.org/advancedsearch.php?q='+encodeURIComponent('('+q+') AND mediatype:movies')+'&fl[]=identifier&fl[]=title&fl[]=licenseurl&fl[]=creator&rows=30&output=json');
+let r=d.response.docs;if($('#onlyl').checked)r=r.filter(x=>x.licenseurl);
+return r.map(x=>mk({id:'ia:'+x.identifier,title:x.title,source:'Internet Archive',license:x.licenseurl||'',page:'https://archive.org/details/'+x.identifier,thumb:'https://archive.org/services/img/'+x.identifier,lazy:x.identifier,files:[]}))},
+async wm(q){const d=await J('https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=30&gsrsearch='+encodeURIComponent('filetype:video '+q)+'&prop=imageinfo&iiprop=url|size|mime|extmetadata&format=json&origin=*');
+return Object.values(d.query?.pages||{}).filter(p=>p.imageinfo).map(p=>{const i=p.imageinfo[0],m=i.extmetadata||{};
+return mk({id:'wm:'+p.pageid,title:p.title.replace('File:',''),source:'Wikimedia Commons',license:m.LicenseShortName?.value||'',page:i.descriptionurl,preview:i.url,dur:i.duration,files:[{url:i.url,w:i.width,h:i.height,size:i.size,type:i.mime,label:(i.height||'?')+'p original'}]})})},
+async px(q){const k=localStorage.kpx;if(!k)throw new Error('Add your free Pexels key in Settings.');
+const d=await J('https://api.pexels.com/videos/search?per_page=30&query='+encodeURIComponent(q),{headers:{Authorization:k}});
+return d.videos.map(v=>mk({id:'px:'+v.id,title:'Pexels video by '+v.user.name,source:'Pexels',license:'pexels license',page:v.url,thumb:v.image,dur:v.duration,preview:(v.video_files.find(f=>f.quality=='sd')||v.video_files[0]).link,
+files:v.video_files.filter(f=>f.file_type=='video/mp4').map(f=>({url:f.link,w:f.width,h:f.height,type:'video/mp4',label:f.height+'p'})).sort((a,b)=>b.h-a.h)}))},
+async pb(q){const k=localStorage.kpb;if(!k)throw new Error('Add your free Pixabay key in Settings.');
+const d=await J('https://pixabay.com/api/videos/?per_page=30&key='+encodeURIComponent(k)+'&q='+encodeURIComponent(q));
+return d.hits.map(v=>{const f=Object.values(v.videos).filter(x=>x.url).map(x=>({url:x.url,w:x.width,h:x.height,size:x.size,type:'video/mp4',label:x.height+'p'})).sort((a,b)=>b.h-a.h);
+return mk({id:'pb:'+v.id,title:'Pixabay video by '+v.user,source:'Pixabay',license:'pixabay license',page:v.pageURL,thumb:v.videos.tiny?.thumbnail,dur:v.duration,preview:v.videos.tiny?.url||f.at(-1)?.url,files:f})})}};
+let R=[];
+function pass(it){const f=it.files||[],h=Math.max(0,...f.map(x=>x.h||0)),fr=+$('#fres').value,fd=+$('#fdur').value,fo=$('#fori').value;
+if(fr&&h&&h<fr)return false;if(fd&&it.dur&&it.dur>fd)return false;
+if(fo&&f.length&&f[0].w&&f[0].h){const o=f[0].w>f[0].h*1.05?'l':f[0].h>f[0].w*1.05?'p':'s';if(o!=fo)return false}return true}
+async function search(){const q=$('#q').value.trim().slice(0,100);if(!q)return;$('#res').innerHTML='<div class="m">Searching…</div>';
+try{R=(await S[$('#src').value](q)).filter(pass);draw()}catch(e){$('#res').innerHTML=`<div class="card" style="color:var(--er)">Search failed: ${esc(e.message)}. Check your connection or key and try again.</div>`}}
+function draw(){$('#res').innerHTML=R.length?R.map((it,i)=>`<div class="card"><b>${esc(it.title)}</b><br>
+${it.preview?`<video controls preload="none" ${it.thumb?`poster="${esc(su(it.thumb))}"`:''} src="${esc(su(it.preview))}"></video>`:it.thumb?`<img src="${esc(su(it.thumb))}" style="width:100%;border-radius:8px">`:''}
+<div class="m">${esc(it.source)} · ${it.dur?Math.round(it.dur)+'s':'length unknown'} · ${it.files.length?Math.max(...it.files.map(f=>f.h||0))+'p max':'resolution: check files'}</div>
+<span class="tag ${it.commercial}">${esc(it.note)}</span><div class="m">License: ${esc(it.license||'none stated')}</div>
+<div class="row"><button onclick="saveR(${i})">★ Save</button><button class="pr" onclick="opts(${i})">Download…</button><a href="${esc(su(it.page))}" target="_blank" rel="noopener">Source page</a></div><div id="o${i}"></div></div>`).join(''):'<div class="m">No results match. Try other words or loosen filters.</div>'}
+async function saveR(i){if(await saveItem({...R[i]}))alert('Saved to library')}
+const MB=n=>n?(n/1048576).toFixed(1)+' MB':'size unknown';
+async function opts(i){const it=R[i],o=$('#o'+i);
+if(it.lazy&&!it.files.length){o.innerHTML='<div class="m">Loading file list…</div>';try{const d=await J('https://archive.org/metadata/'+encodeURIComponent(it.lazy));
+it.files=(d.files||[]).filter(f=>/\.mp4$/i.test(f.name)&&f.source!='derivative'||/\.mp4$/i.test(f.name)).map(f=>({url:`https://archive.org/download/${encodeURIComponent(it.lazy)}/${encodeURIComponent(f.name)}`,w:+f.width||0,h:+f.height||0,size:+f.size||0,type:'video/mp4',label:(f.height?f.height+'p':'MP4')+' · '+f.name.slice(0,30)}));
+if(!it.preview&&it.files[0])it.preview=it.files.at(-1).url}catch(e){o.innerHTML='<span style="color:var(--er)">Could not load files: '+esc(e.message)+'</span>';return}}
+o.innerHTML=it.files.length?it.files.map((f,j)=>`<div class="row" style="margin-top:6px"><button class="pr" onclick="queue(${i},${j})">${esc(f.label)} · ${MB(f.size)}</button><a href="${esc(su(f.url))}" target="_blank" rel="noopener" download>Direct link</a></div>`).join(''):'<div class="m">No downloadable MP4 files offered by this source. Use the source page.</div>'}
+// ---------- download manager ----------
+const T=[];let busy=0;
+async function queue(i,j){const it=R[i],f=it.files[j];if(!await saveItem({...it}))return;T.push({id:Date.now()+Math.random(),it,f,state:'queued',rec:0,total:f.size||0,chunks:[]});go('downloads');pump()}
+function pump(){T.filter(t=>t.state=='queued').forEach(t=>{if(busy<2)run(t)});dl()}
+async function run(t){busy++;t.state='downloading';t.err='';t.ctrl=new AbortController();dl();
+try{const r=await fetch(t.f.url,{headers:t.rec?{Range:'bytes='+t.rec+'-'}:{},signal:t.ctrl.signal});
+if(!r.ok)throw new Error('Server replied '+r.status);
+if(t.rec&&r.status!=206){t.rec=0;t.chunks=[]}
+const len=+r.headers.get('content-length')||0;if(len)t.total=t.rec+len;
+if(t.total>MAXMEM)throw new Error('File over 400 MB: too big for this phone to hold. Use "Direct link" on the Discover tab.');
+const rd=r.body.getReader();for(;;){const{done,value}=await rd.read();if(done)break;t.chunks.push(value);t.rec+=value.length;dl()}
+const blob=new Blob(t.chunks,{type:t.f.type||'video/mp4'});t.chunks=[];
+await tx('files','readwrite',s=>s.put(blob,t.it.id+'|'+t.f.label));
+const rec={...t.it,hasFile:true,fileKey:t.it.id+'|'+t.f.label,fileRes:t.f.h,fileSize:blob.size};await saveItem(rec);t.state='done'}
+catch(e){if(e.name=='AbortError'&&t.state=='pausing')t.state='paused';else{t.state='failed';t.err=e.name=='TypeError'?'Blocked or offline. This source may not allow in-app downloads: use "Direct link".':e.message}}
+busy--;pump()}
+const find=id=>T.find(t=>t.id==id);
+function pause(id){const t=find(id);t.state='pausing';t.ctrl.abort()}
+function resume(id){const t=find(id);t.state='queued';pump()}
+function cancel(id){const t=find(id);if(t.ctrl&&t.state=='downloading'){t.state='cancelled';t.ctrl.abort()}T.splice(T.indexOf(t),1);dl()}
+function dl(){$('#dl').innerHTML=T.length?T.map(t=>`<div class="card"><b>${esc(t.it.title)}</b><div class="m">${esc(t.f.label)} · ${t.state}${t.err?' — '+esc(t.err):''}</div>
+<progress value="${t.rec}" max="${t.total||t.rec||1}"></progress><div class="m">${MB(t.rec)} / ${MB(t.total)}</div>
+<div class="row">${t.state=='downloading'?`<button onclick="pause(${t.id})">Pause</button>`:''}${['paused','failed'].includes(t.state)?`<button class="pr" onclick="resume(${t.id})">Resume/Retry</button>`:''}${t.state=='done'?'<button onclick="go(\'library\')">Open in Library</button>':''}<button class="dg" onclick="cancel(${t.id})">Remove</button></div></div>`).join(''):'<div class="m">No downloads yet. Use Discover → Download…</div>'}
+// ---------- library ----------
+async function lib(){const q=($('#ls').value||'').toLowerCase(),a=(await allItems()).filter(x=>(x.title+x.folder+x.source).toLowerCase().includes(q)).sort((a,b)=>b.saved-a.saved);
+$('#libl').innerHTML=a.length?a.map(x=>`<div class="card"><b>${esc(x.title)}</b><div class="m">${esc(x.source)} · folder: ${esc(x.folder||'none')} · ${x.hasFile?'downloaded '+(x.fileRes||'?')+'p, '+MB(x.fileSize):'link only'}</div>
+<span class="tag ${x.commercial}">${esc(x.note)}</span><div class="m">License: ${esc(x.license||'none stated')}</div>
+<div class="row"><a href="${esc(su(x.page))}" target="_blank" rel="noopener">Source</a>${x.hasFile?`<button onclick="play('${esc(x.id)}')">Play</button><button onclick="keep('${esc(x.id)}')">Save to phone</button>`:''}<button onclick="ren('${esc(x.id)}')">Rename</button><button onclick="fold('${esc(x.id)}')">Folder</button><button class="dg" onclick="del('${esc(x.id)}')">Delete</button></div><div id="p_${esc(x.id)}"></div></div>`).join(''):'<div class="m">Library is empty. Save footage from Discover.</div>'}
+const getI=id=>tx('items','readonly',s=>s.get(id)),getF=k=>tx('files','readonly',s=>s.get(k));
+async function ren(id){const x=await getI(id),n=prompt('New name',x.title);if(n){x.title=n.slice(0,120);await saveItem(x);lib()}}
+async function fold(id){const x=await getI(id),n=prompt('Folder name',x.folder||'');if(n!==null){x.folder=n.slice(0,40);await saveItem(x);lib()}}
+async function del(id){if(!confirm('Delete this item and its downloaded file?'))return;const x=await getI(id);await tx('items','readwrite',s=>s.delete(id));if(x.fileKey)await tx('files','readwrite',s=>s.delete(x.fileKey));lib();stats()}
+async function play(id){const x=await getI(id),b=await getF(x.fileKey);if(!b)return alert('File missing');document.getElementById('p_'+id).innerHTML=`<video controls src="${URL.createObjectURL(b)}"></video>`}
+async function keep(id){const x=await getI(id),b=await getF(x.fileKey);if(!b)return alert('File missing');const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=x.title.replace(/[^\w.-]+/g,'_')+'.mp4';a.click()}
+// ---------- dashboard & settings ----------
+async function stats(){const a=await allItems();let s='Storage info unavailable on this browser.';
+if(navigator.storage?.estimate){const e=await navigator.storage.estimate(),p=e.quota?Math.round(e.usage/e.quota*100):0;s=`Used ${MB(e.usage)} of about ${MB(e.quota)} (${p}%)`+(p>80?' ⚠ nearly full: delete items before downloading more.':'')}
+$('#stats').innerHTML=`Saved items: ${a.length} · Downloaded files: ${a.filter(x=>x.hasFile).length}<br>${s}`;$('#stor').textContent=s;
+$('#recent').innerHTML=a.sort((x,y)=>y.saved-x.saved).slice(0,5).map(x=>esc(x.title)).join('<br>')||'Nothing yet.';$('#kpx').value=localStorage.kpx||'';$('#kpb').value=localStorage.kpb||''}
+function saveKeys(){localStorage.kpx=$('#kpx').value.trim();localStorage.kpb=$('#kpb').value.trim();alert('Keys saved on this device only.')}
+function clearKeys(){localStorage.removeItem('kpx');localStorage.removeItem('kpb');$('#kpx').value=$('#kpb').value='';}
+async function persist(){alert(navigator.storage?.persist&&await navigator.storage.persist()?'Browser will try to keep your data.':'Browser declined. Keep important files saved to your phone.')}
+go('dashboard');dl();
+</script></body></html>
